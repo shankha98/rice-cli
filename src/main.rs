@@ -1,21 +1,47 @@
+use clap::{Parser, Subcommand};
 use console::{Emoji, style};
 use dialoguer::{Confirm, Input, Password, theme::ColorfulTheme};
+use indicatif::{ProgressBar, ProgressStyle};
 use reqwest::Client;
 use std::fs;
 use std::io::Write;
 use std::path::Path;
 
-static RICE: Emoji<'_, '_> = Emoji("🍚  ", "");
 static CHECK: Emoji<'_, '_> = Emoji("✔  ", "");
 static CROSS: Emoji<'_, '_> = Emoji("✖  ", "");
 
+#[derive(Parser)]
+#[command(name = "rice-cli")]
+#[command(about = "Rice CLI Setup Tool", long_about = None)]
+struct Cli {
+    #[command(subcommand)]
+    command: Option<Commands>,
+}
+
+#[derive(Subcommand)]
+enum Commands {
+    /// Setup Rice in the current project (default)
+    Setup,
+    /// Show current configuration
+    Config,
+    /// Check connection to Rice instance
+    Check,
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    println!(
-        "{} {}",
-        RICE,
-        style("Welcome to the Rice CLI Setup").bold().green()
-    );
+    let cli = Cli::parse();
+
+    match cli.command {
+        Some(Commands::Setup) | None => run_setup().await?,
+        Some(Commands::Config) => run_config()?,
+        Some(Commands::Check) => run_check().await?,
+    }
+    Ok(())
+}
+
+async fn run_setup() -> Result<(), Box<dyn std::error::Error>> {
+    println!("{}", style("Welcome to the Rice CLI Setup").bold().green());
     println!("This utility will walk you through setting up Rice in your project.\n");
 
     let theme = ColorfulTheme::default();
@@ -143,7 +169,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // 4. Verify Connection
     if enable_storage {
-        println!("\n{}", style("Verifying connection to Storage...").bold());
+        println!(""); // Add a newline for spacing
+        let spinner = ProgressBar::new_spinner();
+        spinner.set_style(
+            ProgressStyle::default_spinner()
+                .tick_chars("⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏ ")
+                .template("{spinner:.green} {msg}")
+                .unwrap(),
+        );
+        spinner.set_message("Verifying connection to Storage...");
+        spinner.enable_steady_tick(std::time::Duration::from_millis(100));
 
         // Construct HTTP URL from storage_url host and storage_http_port
         let host = if storage_url.contains(":") {
@@ -157,6 +192,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let client = Client::new();
         match client.get(&health_url).send().await {
             Ok(res) => {
+                spinner.finish_and_clear();
                 if res.status().is_success() {
                     println!(
                         "{} Successfully connected to Rice Storage at {}",
@@ -168,6 +204,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
             }
             Err(e) => {
+                spinner.finish_and_clear();
                 println!("{} Connection failed: {}", CROSS, e);
                 println!(
                     "   Could not reach {}. Please ensure Rice is running and HTTP port is correct.",
@@ -179,6 +216,87 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     println!("\n{}", style("Setup complete!").bold().green());
     println!("You can now install the SDK using: npm install rice-node-sdk");
+
+    Ok(())
+}
+
+fn run_config() -> Result<(), Box<dyn std::error::Error>> {
+    dotenvy::dotenv().ok();
+    println!("{}", style("Rice Configuration:").bold().green());
+
+    let vars = [
+        "STORAGE_INSTANCE_URL",
+        "STORAGE_USER",
+        "STORAGE_AUTH_TOKEN",
+        "STORAGE_HTTP_PORT",
+        "STATE_INSTANCE_URL",
+        "STATE_AUTH_TOKEN",
+        "STATE_RUN_ID",
+    ];
+
+    for var in vars {
+        if let Ok(val) = std::env::var(var) {
+            let display_val = if var.contains("TOKEN") {
+                "********"
+            } else {
+                &val
+            };
+            println!("{}: {}", var, display_val);
+        } else {
+            println!("{}: {}", var, style("Not set").dim());
+        }
+    }
+
+    if Path::new("rice.config.js").exists() {
+        println!("\nrice.config.js found.");
+    } else {
+        println!("\nrice.config.js not found.");
+    }
+
+    Ok(())
+}
+
+async fn run_check() -> Result<(), Box<dyn std::error::Error>> {
+    dotenvy::dotenv().ok();
+    println!("{}", style("Checking connection to Rice...").bold());
+
+    let storage_url =
+        std::env::var("STORAGE_INSTANCE_URL").unwrap_or("localhost:50051".to_string());
+    let http_port = std::env::var("STORAGE_HTTP_PORT").unwrap_or("3000".to_string());
+
+    let host = if storage_url.contains(":") {
+        storage_url.split(':').next().unwrap_or("localhost")
+    } else {
+        &storage_url
+    };
+
+    let health_url = format!("http://{}:{}/health", host, http_port);
+
+    let spinner = ProgressBar::new_spinner();
+    spinner.set_style(
+        ProgressStyle::default_spinner()
+            .tick_chars("⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏ ")
+            .template("{spinner:.green} {msg}")
+            .unwrap(),
+    );
+    spinner.set_message(format!("Checking Storage health at {}...", health_url));
+    spinner.enable_steady_tick(std::time::Duration::from_millis(100));
+
+    let client = Client::new();
+    match client.get(&health_url).send().await {
+        Ok(res) => {
+            spinner.finish_and_clear();
+            if res.status().is_success() {
+                println!("{} Storage is healthy (Status: {})", CHECK, res.status());
+            } else {
+                println!("{} Storage is unhealthy (Status: {})", CROSS, res.status());
+            }
+        }
+        Err(e) => {
+            spinner.finish_and_clear();
+            println!("{} Failed to connect to Storage: {}", CROSS, e);
+        }
+    }
 
     Ok(())
 }

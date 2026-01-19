@@ -3,3 +3,4 @@ base_sdk/
 # Added by cargo
 
 /target
+example-project/
