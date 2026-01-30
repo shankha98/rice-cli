@@ -4,3 +4,4 @@ base_sdk/
 
 /target
 example-project/
+dist/

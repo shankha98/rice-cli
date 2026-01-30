@@ -2,6 +2,10 @@
 name = "rice-cli"
 version = "0.1.0"
 edition = "2024"
+description = "A CLI tool for setting up Rice in JS/TS projects"
+license = "Proprietary"
+repository = "https://github.com/shankha98/rice-cli"
+authors = ["Shankha <shankha@tryrice.com>"]
 
 [dependencies]
 clap = { version = "4.5.54", features = ["derive"] }
@@ -11,3 +15,8 @@ dotenvy = "0.15.7"
 indicatif = "0.18.3"
 reqwest = { version = "0.13.1", features = ["json"] }
 tokio = { version = "1.49.0", features = ["full"] }
+
+[profile.release]
+lto = true
+codegen-units = 1
+strip = true

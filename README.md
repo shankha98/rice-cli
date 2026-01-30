@@ -11,17 +11,27 @@ This tool helps you:
 
 ## Installation
 
-### Prerequisites
+### Quick Install (macOS / Linux)
 
-- Rust and Cargo installed (for building from source).
-
-### Building
+To install the latest version automatically:
 
 ```bash
-cargo build --release
+curl -fsSL https://raw.githubusercontent.com/shankha98/rice-cli/main/install.sh | bash
 ```
 
-The binary will be available at `target/release/rice-cli`.
+This will install the `rice` command to `/usr/local/bin`.
+
+### Manual Installation
+
+Download the pre-built binary for your platform from the [Releases page](https://github.com/shankha98/rice-cli/releases).
+
+### Building from Source
+
+To build from source, ensure you have Rust installed:
+
+```bash
+cargo install --path .
+```
 
 ## Usage
 
